@@ -28,7 +28,9 @@ import {
   Quote,
   RefreshCw,
   ExternalLink,
-  Pencil
+  Pencil,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // --- Constants & Mock Data ---
@@ -106,16 +108,60 @@ const App = () => {
     { id: 3, name: 'Priya M.', role: 'Designer' },
   ];
 
-  // Q&A Bot State
-  const [botOpen, setBotOpen] = useState(false);
-  const [botMessages, setBotMessages] = useState([{ role: 'assistant', text: 'Hi! Ask me anything about your research findings.' }]);
+  // Agentic Chat State
+  const [botOpen, setBotOpen] = useState(true);
+  const [botThinking, setBotThinking] = useState(false);
+  const [botMessages, setBotMessages] = useState([
+    { role: 'agent', text: 'I\'ve analysed your 3 interviews. I found 3 problem themes and flagged 3 coaching issues in your technique. What would you like to explore?' },
+  ]);
   const [botInput, setBotInput] = useState('');
+
+  const AGENT_ACTIONS = [
+    { label: 'Summarise key findings', icon: '📋' },
+    { label: 'Which theme needs most attention?', icon: '🎯' },
+    { label: 'Draft a recommendation', icon: '✍️' },
+    { label: 'Compare interviews', icon: '🔍' },
+  ];
+
+  const TOOL_SEQUENCES = {
+    default: ['Searching transcripts…', 'Cross-referencing themes…', 'Generating response…'],
+    summarise: ['Reading all 3 interviews…', 'Extracting key quotes…', 'Building summary…'],
+    recommendation: ['Analysing top problems…', 'Checking confidence scores…', 'Drafting recommendation…'],
+    compare: ['Loading interview data…', 'Aligning by theme…', 'Comparing patterns…'],
+  };
 
   const sendBotMessage = (text) => {
     if (!text.trim()) return;
-    const reply = { role: 'assistant', text: `Based on your interviews, "${text.slice(0, 60)}" relates to recurring friction with navigation and onboarding. Users consistently mentioned needing clearer wayfinding and in-app guidance.` };
-    setBotMessages(prev => [...prev, { role: 'user', text }, reply]);
+    setBotMessages(prev => [...prev, { role: 'user', text }]);
     setBotInput('');
+    setBotThinking(true);
+    const lower = text.toLowerCase();
+    const seq = lower.includes('summar') ? TOOL_SEQUENCES.summarise
+      : lower.includes('recommend') ? TOOL_SEQUENCES.recommendation
+      : lower.includes('compar') ? TOOL_SEQUENCES.compare
+      : TOOL_SEQUENCES.default;
+    let i = 0;
+    const addTool = () => {
+      if (i < seq.length) {
+        setBotMessages(prev => [...prev, { role: 'tool', text: seq[i] }]);
+        i++;
+        setTimeout(addTool, 900);
+      } else {
+        setBotThinking(false);
+        const replies = {
+          summarise: 'Across your 3 interviews, users consistently struggle with navigation (all 3 mentioned losing context), onboarding friction (avg. 3 days to productivity), and feature discoverability. Navigation is the highest-confidence theme.',
+          recommendation: 'Top recommendation: Add persistent breadcrumbs to all deep-nav screens. This directly addresses the #1 problem reported by 100% of participants and is a low-effort, high-impact fix.',
+          compare: 'Sarah K. and Priya M. both flagged navigation and onboarding. James T. focused primarily on productivity and feature discoverability. The navigation theme is the only one shared across all three.',
+          default: `Based on your interviews, "${text.slice(0, 50)}" maps to recurring friction around navigation and onboarding. Users mentioned needing clearer wayfinding and in-app guidance across all sessions.`,
+        };
+        const replyKey = lower.includes('summar') ? 'summarise'
+          : lower.includes('recommend') ? 'recommendation'
+          : lower.includes('compar') ? 'compare'
+          : 'default';
+        setBotMessages(prev => [...prev, { role: 'agent', text: replies[replyKey] }]);
+      }
+    };
+    setTimeout(addTool, 600);
   };
 
   // Focus Mode State
@@ -834,55 +880,104 @@ const App = () => {
               )}
             </main>
 
-            {/* FLOATING Q&A BOT */}
-            <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
-              {botOpen && (
-                <div className="w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200" style={{height: '420px'}}>
-                  {/* Header */}
-                  <div className="flex items-center gap-2 px-4 py-3 bg-[#1A1F2B] flex-shrink-0">
-                    <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center">
-                      <MessageSquare className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-white text-sm font-semibold flex-1">Q&A Bot</span>
-                    <button onClick={() => setBotOpen(false)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-                      <X className="w-4 h-4 text-white/60" />
-                    </button>
-                  </div>
-                  {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {botMessages.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Input */}
-                  <div className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 flex-shrink-0">
-                    <input
-                      className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-300"
-                      placeholder="Ask about your findings…"
-                      value={botInput}
-                      onChange={e => setBotInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && sendBotMessage(botInput)}
-                    />
-                    <button
-                      onClick={() => sendBotMessage(botInput)}
-                      className="w-8 h-8 bg-orange-500 hover:bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  </div>
-                </div>
-              )}
-              {/* FAB */}
+            {/* AGENTIC CHAT PANEL */}
+            <div className={`flex-shrink-0 flex border-l border-gray-200 bg-white transition-all duration-300 ${botOpen ? 'w-80' : 'w-10'} relative`}>
+              {/* Collapse toggle tab */}
               <button
                 onClick={() => setBotOpen(prev => !prev)}
-                className="w-12 h-12 bg-[#1A1F2B] hover:bg-black rounded-2xl shadow-lg flex items-center justify-center transition-all hover:scale-105"
+                className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white border border-gray-200 rounded-l-lg flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors"
               >
-                {botOpen ? <X className="w-5 h-5 text-white" /> : <MessageSquare className="w-5 h-5 text-white" />}
+                {botOpen ? <ChevronRight className="w-3.5 h-3.5 text-gray-400" /> : <ChevronLeft className="w-3.5 h-3.5 text-gray-400" />}
               </button>
+
+              {botOpen ? (
+                <div className="flex flex-col w-full overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+                    <div className="w-7 h-7 bg-[#1A1F2B] rounded-lg flex items-center justify-center">
+                      <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-gray-900">Research Agent</p>
+                      <p className="text-[10px] text-gray-400">{botThinking ? 'Working…' : '3 interviews analysed'}</p>
+                    </div>
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${botThinking ? 'bg-orange-400 animate-pulse' : 'bg-green-400'}`} />
+                  </div>
+
+                  {/* Suggested actions */}
+                  {botMessages.length <= 1 && (
+                    <div className="px-3 pt-3 pb-1 flex flex-wrap gap-1.5 flex-shrink-0">
+                      {AGENT_ACTIONS.map((a, i) => (
+                        <button
+                          key={i}
+                          onClick={() => sendBotMessage(a.label)}
+                          className="flex items-center gap-1 text-[10px] font-medium bg-gray-50 hover:bg-orange-50 hover:text-orange-700 border border-gray-200 hover:border-orange-200 text-gray-600 px-2.5 py-1.5 rounded-lg transition-all"
+                        >
+                          <span>{a.icon}</span> {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-2.5">
+                    {botMessages.map((msg, i) => (
+                      msg.role === 'tool' ? (
+                        <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg">
+                          <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse flex-shrink-0" />
+                          <span className="text-[10px] text-gray-400 font-mono">{msg.text}</span>
+                        </div>
+                      ) : (
+                        <div key={i} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                          {msg.role === 'agent' && (
+                            <div className="flex items-center gap-1 px-1">
+                              <Sparkles className="w-3 h-3 text-orange-400" />
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Agent</span>
+                            </div>
+                          )}
+                          <div className={`max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-[#1A1F2B] text-white' : 'bg-orange-50 border border-orange-100 text-gray-700'}`}>
+                            {msg.text}
+                          </div>
+                        </div>
+                      )
+                    ))}
+                    {botThinking && botMessages[botMessages.length - 1]?.role !== 'tool' && (
+                      <div className="flex gap-1 px-3 py-2">
+                        <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                        <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                        <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Input */}
+                  <div className="px-3 py-3 border-t border-gray-100 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300"
+                        placeholder="Ask the agent…"
+                        value={botInput}
+                        onChange={e => setBotInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && !botThinking && sendBotMessage(botInput)}
+                        disabled={botThinking}
+                      />
+                      <button
+                        onClick={() => !botThinking && sendBotMessage(botInput)}
+                        disabled={botThinking}
+                        className="w-8 h-8 bg-[#1A1F2B] hover:bg-black disabled:opacity-40 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                      >
+                        <Send className="w-3.5 h-3.5 text-white" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Collapsed state — vertical label */
+                <div className="flex flex-col items-center justify-center w-full gap-2 py-4">
+                  <Sparkles className="w-4 h-4 text-orange-400" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest" style={{writingMode:'vertical-rl', transform:'rotate(180deg)'}}>Agent</span>
+                </div>
+              )}
             </div>
 
             {/* FULL-SCREEN FOCUS MODE */}

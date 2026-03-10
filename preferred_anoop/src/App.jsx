@@ -106,16 +106,40 @@ const App = () => {
     { id: 3, name: 'Priya M.', role: 'Designer' },
   ];
 
-  // Q&A Bot State
-  const [botOpen, setBotOpen] = useState(false);
-  const [botMessages, setBotMessages] = useState([{ role: 'assistant', text: 'Hi! Ask me anything about your research findings.' }]);
-  const [botInput, setBotInput] = useState('');
+  // AI Search State
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiResult, setAiResult] = useState(null);
+  const [aiSearching, setAiSearching] = useState(false);
 
-  const sendBotMessage = (text) => {
+  const AI_SUGGESTIONS = [
+    'What is the most critical issue?',
+    'Which users mentioned navigation?',
+    'Summarise onboarding friction',
+    'Any quick wins?',
+  ];
+
+  const AI_ANSWERS = {
+    critical: 'Poor Navigation is the most critical issue — it affects 100% of participants and has the highest evidence density. Users lose context in deep menu hierarchies and struggle to retrace steps.',
+    navigation: 'All 3 participants mentioned navigation issues. Sarah K. (Recording_01) struggled to retrace steps. James T. (Recording_02) found the multi-step wizard confusing. Priya M. also flagged the lack of breadcrumbs.',
+    onboarding: 'Onboarding friction is driven by 3 sub-issues: the process takes ~3 days, there is no in-app guidance, and the learning curve is steep. Priya M. specifically noted the docs are outdated.',
+    quickwins: 'Top quick win: Add persistent breadcrumbs — low engineering effort, directly resolves the #1 reported problem. Second quick win: Surface the export button at the top of tables instead of hiding it in "Actions".',
+    default: 'Across your 3 interviews, the top themes are Poor Navigation (high confidence), Low Productivity (high confidence), and Onboarding Friction (medium confidence). Navigation is the most urgent area to address.',
+  };
+
+  const runAiSearch = (text) => {
     if (!text.trim()) return;
-    const reply = { role: 'assistant', text: `Based on your interviews, "${text.slice(0, 60)}" relates to recurring friction with navigation and onboarding. Users consistently mentioned needing clearer wayfinding and in-app guidance.` };
-    setBotMessages(prev => [...prev, { role: 'user', text }, reply]);
-    setBotInput('');
+    setAiSearching(true);
+    setAiResult(null);
+    setTimeout(() => {
+      const lower = text.toLowerCase();
+      const key = lower.includes('critical') || lower.includes('most') ? 'critical'
+        : lower.includes('navig') ? 'navigation'
+        : lower.includes('onboard') ? 'onboarding'
+        : lower.includes('quick') ? 'quickwins'
+        : 'default';
+      setAiResult(AI_ANSWERS[key]);
+      setAiSearching(false);
+    }, 900);
   };
 
   // Focus Mode State
@@ -764,7 +788,63 @@ const App = () => {
                     </div>
 
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">Problem Themes</h1>
-                    <p className="text-sm text-gray-500 mb-8">Click any evidence clip to enter Focus Mode for deep analysis.</p>
+                    <p className="text-sm text-gray-500 mb-5">Click any evidence clip to enter Focus Mode for deep analysis.</p>
+
+                    {/* AI SEARCH BAR */}
+                    <div className="mb-8">
+                      <div className={`flex items-center gap-3 bg-white border-2 rounded-2xl px-4 py-3 transition-all shadow-sm ${aiSearching ? 'border-orange-300' : 'border-gray-200 focus-within:border-orange-300 focus-within:shadow-md'}`}>
+                        <div className="w-7 h-7 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Sparkles className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <input
+                          className="flex-1 text-sm text-gray-700 bg-transparent outline-none placeholder-gray-400"
+                          placeholder="Ask AI anything about your research findings…"
+                          value={aiQuery}
+                          onChange={e => { setAiQuery(e.target.value); setAiResult(null); }}
+                          onKeyDown={e => e.key === 'Enter' && runAiSearch(aiQuery)}
+                        />
+                        {aiSearching ? (
+                          <div className="flex gap-1 px-2">
+                            <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                            <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                            <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => runAiSearch(aiQuery)}
+                            className="text-[11px] font-semibold text-orange-500 hover:text-orange-700 px-2 py-1 rounded-lg hover:bg-orange-50 transition-colors whitespace-nowrap"
+                          >
+                            Ask AI ↵
+                          </button>
+                        )}
+                      </div>
+                      {/* Suggestion chips */}
+                      {!aiResult && !aiSearching && (
+                        <div className="flex flex-wrap gap-2 mt-2.5 px-1">
+                          {AI_SUGGESTIONS.map((s, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { setAiQuery(s); runAiSearch(s); }}
+                              className="text-[11px] text-gray-500 hover:text-orange-600 bg-gray-50 hover:bg-orange-50 border border-gray-200 hover:border-orange-200 px-3 py-1.5 rounded-full transition-all"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* AI Result */}
+                      {aiResult && (
+                        <div className="mt-3 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <Sparkles className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-700 leading-relaxed">{aiResult}</p>
+                          </div>
+                          <button onClick={() => { setAiResult(null); setAiQuery(''); }} className="text-gray-300 hover:text-gray-500 flex-shrink-0">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* INSIGHT CARDS GRID */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -833,57 +913,6 @@ const App = () => {
                 </div>
               )}
             </main>
-
-            {/* FLOATING Q&A BOT */}
-            <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
-              {botOpen && (
-                <div className="w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200" style={{height: '420px'}}>
-                  {/* Header */}
-                  <div className="flex items-center gap-2 px-4 py-3 bg-[#1A1F2B] flex-shrink-0">
-                    <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center">
-                      <MessageSquare className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-white text-sm font-semibold flex-1">Q&A Bot</span>
-                    <button onClick={() => setBotOpen(false)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-                      <X className="w-4 h-4 text-white/60" />
-                    </button>
-                  </div>
-                  {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {botMessages.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Input */}
-                  <div className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 flex-shrink-0">
-                    <input
-                      className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-300"
-                      placeholder="Ask about your findings…"
-                      value={botInput}
-                      onChange={e => setBotInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && sendBotMessage(botInput)}
-                    />
-                    <button
-                      onClick={() => sendBotMessage(botInput)}
-                      className="w-8 h-8 bg-orange-500 hover:bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  </div>
-                </div>
-              )}
-              {/* FAB */}
-              <button
-                onClick={() => setBotOpen(prev => !prev)}
-                className="w-12 h-12 bg-[#1A1F2B] hover:bg-black rounded-2xl shadow-lg flex items-center justify-center transition-all hover:scale-105"
-              >
-                {botOpen ? <X className="w-5 h-5 text-white" /> : <MessageSquare className="w-5 h-5 text-white" />}
-              </button>
-            </div>
 
             {/* FULL-SCREEN FOCUS MODE */}
             {focusEvidence && (
