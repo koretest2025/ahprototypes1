@@ -76,13 +76,19 @@ const MOCK_PROJECTS = [
 
 const App = () => {
   // Navigation & Flow State
-  const [step, setStep] = useState('upload'); 
+  const [step, setStep] = useState('upload');
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentFact, setCurrentFact] = useState(0);
   const [activeNav, setActiveNav] = useState('Official vs. Actual Workflow');
   const [activeTab, setActiveTab] = useState('Summary'); // 'Summary' | 'Projects'
-  
+
+  // Interview Type State — analyzePhase: 'identifying' → 'confirming' → 'processing'
+  const [analyzePhase, setAnalyzePhase] = useState('identifying');
+  const [typeProgress, setTypeProgress] = useState(0);
+  const [detectedType, setDetectedType] = useState('problem');
+  const [confirmedType, setConfirmedType] = useState(null);
+
   // Refs
   const fileInputRef = useRef(null);
 
@@ -294,12 +300,34 @@ const App = () => {
     const uploadedFiles = Array.from(e.target.files);
     if (uploadedFiles.length === 0) return;
     const totalSize = uploadedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
-    if (totalSize > 300) { 
-        console.warn("Total upload size exceeds 300MB limit."); 
-        return; 
-    }
+    if (totalSize > 300) { console.warn("Total upload size exceeds 300MB limit."); return; }
     setFiles(uploadedFiles);
+    setTypeProgress(0);
+    setDetectedType('problem');
+    setConfirmedType(null);
+    setAnalyzePhase('identifying');
     setStep('analyzing');
+    startTypeDetection();
+  };
+
+  const startTypeDetection = () => {
+    let p = 0;
+    const iv = setInterval(() => {
+      p += 3;
+      if (p >= 100) {
+        clearInterval(iv);
+        setTypeProgress(100);
+        setAnalyzePhase('confirming');
+      } else {
+        setTypeProgress(p);
+      }
+    }, 80);
+  };
+
+  const handleProceed = () => {
+    setConfirmedType(detectedType);
+    setUploadProgress(0);
+    setAnalyzePhase('processing');
     startSimulation();
   };
 
@@ -308,22 +336,14 @@ const App = () => {
     const interval = setInterval(() => {
       progress += 5;
       setUploadProgress(prev => {
-        if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
-        }
+        if (prev >= 100) { clearInterval(interval); return 100; }
         return prev + 5;
       });
     }, 200);
-
-    const factInterval = setInterval(() => { 
-        setCurrentFact(prev => (prev + 1) % RESEARCH_FACTS.length); 
+    const factInterval = setInterval(() => {
+      setCurrentFact(prev => (prev + 1) % RESEARCH_FACTS.length);
     }, 4000);
-
-    return () => { 
-        clearInterval(interval); 
-        clearInterval(factInterval); 
-    };
+    return () => { clearInterval(interval); clearInterval(factInterval); };
   };
 
   const isSingleVideo = files.length === 1;
@@ -424,7 +444,7 @@ const App = () => {
             Stop re-watching User research calls. <br />
             Get the <span className="text-[#FF7A00]">Shadow Workflow</span> in seconds.
           </h1>
-          <div 
+          <div
             onClick={() => fileInputRef.current?.click()}
             className="w-full max-w-2xl mt-12 p-12 bg-white rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-300 transition-all cursor-pointer shadow-sm group active:scale-[0.98]"
           >
@@ -442,184 +462,212 @@ const App = () => {
 
       {/* ANALYZING SCREEN */}
       {step === 'analyzing' && (() => {
-        const JOURNEY_STEPS = [
-          'Identifying interview type',
-          'Extracting problems',
-          'Generating problem themes',
-          'Generating problem theme report',
-        ];
-        const getStepState = (index) => {
-          const threshold = (index + 1) * 25;
-          const activeThreshold = index * 25;
-          if (uploadProgress >= threshold) return 'done';
-          if (uploadProgress >= activeThreshold) return 'active';
+        const TYPE_INFO = {
+          problem:    { label: 'Problem Validation',    icon: '🔍', desc: 'Interviews focused on uncovering user pain points and unmet needs.' },
+          solution:   { label: 'Solution Validation',   icon: '💡', desc: 'Interviews testing user reactions to a specific solution or prototype.' },
+          experience: { label: 'Experience Validation', icon: '🗺️', desc: 'Interviews mapping the end-to-end user journey and experience gaps.' },
+        };
+        const STEPS_BY_TYPE = {
+          problem:    ['Transcribing videos', 'Extracting pain points', 'Clustering problem themes', 'Generating problem validation report'],
+          solution:   ['Transcribing videos', 'Extracting feedback & reactions', 'Analysing solution acceptance', 'Generating solution validation report'],
+          experience: ['Transcribing videos', 'Mapping user journey steps', 'Identifying experience gaps', 'Generating experience report'],
+        };
+        const JOURNEY_STEPS = STEPS_BY_TYPE[confirmedType] || STEPS_BY_TYPE.problem;
+        const getStepState = (i) => {
+          if (uploadProgress >= (i + 1) * 25) return 'done';
+          if (uploadProgress >= i * 25) return 'active';
           return 'pending';
         };
         const allDone = uploadProgress >= 100;
+        const info = TYPE_INFO[detectedType];
 
         return (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 z-10">
-            <div className="max-w-3xl w-full flex flex-col gap-8 animate-in fade-in zoom-in-95 duration-500">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold mb-4 italic">Analyzing your interviews...</h2>
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex flex-col items-center p-6 py-10 z-10">
+              <div className="max-w-2xl w-full flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-500">
 
-                {/* Sign-up CTA */}
-                <div className="bg-gradient-to-r from-orange-500 to-orange-400 rounded-2xl p-5 mb-6 text-left flex items-center justify-between gap-4 shadow-lg shadow-orange-100">
-                  <div>
-                    <p className="text-white font-bold text-base mb-0.5">Your report will be ready soon!</p>
-                    <p className="text-orange-100 text-sm">Sign up now to save your report, access it anytime, and run future analyses in seconds.</p>
-                  </div>
-                  <button className="flex-shrink-0 bg-white text-orange-600 font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-orange-50 transition-all shadow-sm whitespace-nowrap flex items-center gap-2">
-                    <User className="w-4 h-4" /> Sign Up Free
-                  </button>
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold italic">Analyzing your interviews...</h2>
+                  <p className="text-sm text-gray-400 mt-1">{files.length} video{files.length !== 1 ? 's' : ''} uploaded</p>
                 </div>
 
-                {/* Journey Steps - Horizontal */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-6 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    {JOURNEY_STEPS.map((label, index) => {
-                      const state = getStepState(index);
-                      const isLast = index === JOURNEY_STEPS.length - 1;
-                      return (
-                        <div key={index} className="flex items-center flex-1">
-                          {/* Step */}
-                          <div className="flex flex-col items-center flex-shrink-0 w-24">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
-                              state === 'done' ? 'bg-orange-500 text-white' :
-                              state === 'active' ? 'bg-orange-50 border-2 border-orange-400' :
-                              'bg-gray-100 border-2 border-gray-200'
-                            }`}>
-                              {state === 'done' ? (
-                                <CheckCircle2 className="w-5 h-5" />
-                              ) : state === 'active' ? (
-                                <div className="w-3 h-3 rounded-full bg-orange-400 animate-pulse" />
-                              ) : (
-                                <div className="w-3 h-3 rounded-full bg-gray-300" />
-                              )}
+                {/* ── PHASE 1: Identifying type ── */}
+                {analyzePhase === 'identifying' && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-full bg-orange-50 border-2 border-orange-200 flex items-center justify-center flex-shrink-0">
+                        <div className="w-3 h-3 rounded-full bg-orange-400 animate-ping" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">Identifying interview type</p>
+                        <p className="text-xs text-gray-400 animate-pulse">Scanning topics, questions & conversation patterns…</p>
+                      </div>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="bg-orange-400 h-full rounded-full transition-all duration-100 ease-out" style={{ width: `${typeProgress}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2 text-right">{typeProgress}%</p>
+                  </div>
+                )}
+
+                {/* ── PHASE 2: Confirm detected type ── */}
+                {analyzePhase === 'confirming' && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-2 mb-4">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <p className="text-sm font-bold text-gray-800">Interview type identified</p>
+                    </div>
+
+                    {/* All 3 type options — detected one pre-selected */}
+                    <div className="space-y-2 mb-5">
+                      {Object.entries(TYPE_INFO).map(([key, opt]) => (
+                        <button
+                          key={key}
+                          onClick={() => setDetectedType(key)}
+                          className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${
+                            detectedType === key
+                              ? 'border-orange-400 bg-orange-50'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="text-2xl">{opt.icon}</span>
+                          <div className="flex-1">
+                            <p className={`text-sm font-bold ${detectedType === key ? 'text-orange-700' : 'text-gray-800'}`}>{opt.label}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+                          </div>
+                          {detectedType === key
+                            ? <CheckCircle2 className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                            : <div className="w-4 h-4 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                          }
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-gray-400 mb-4 text-center">
+                      AI detected <span className="font-semibold text-gray-600">{info.label}</span> — change if needed, then proceed.
+                    </p>
+                    <button
+                      onClick={handleProceed}
+                      className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-all flex items-center justify-center gap-2 shadow-md shadow-orange-100"
+                    >
+                      Proceed with {TYPE_INFO[detectedType]?.label} <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* ── PHASE 3: Processing ── */}
+                {analyzePhase === 'processing' && (<>
+
+                  {/* Type badge + step tracker */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                    <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full mb-5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {TYPE_INFO[confirmedType]?.label}
+                    </div>
+                    <div className="flex items-start justify-between">
+                      {JOURNEY_STEPS.map((label, index) => {
+                        const state = getStepState(index);
+                        const isLast = index === JOURNEY_STEPS.length - 1;
+                        return (
+                          <div key={index} className="flex items-center flex-1">
+                            <div className="flex flex-col items-center flex-shrink-0 w-24">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
+                                state === 'done' ? 'bg-orange-500 text-white' :
+                                state === 'active' ? 'bg-orange-50 border-2 border-orange-400' :
+                                'bg-gray-100 border-2 border-gray-200'
+                              }`}>
+                                {state === 'done' ? <CheckCircle2 className="w-5 h-5" />
+                                  : state === 'active' ? <div className="w-3 h-3 rounded-full bg-orange-400 animate-pulse" />
+                                  : <div className="w-3 h-3 rounded-full bg-gray-300" />}
+                              </div>
+                              <p className={`text-[11px] font-semibold text-center mt-2 leading-tight transition-colors duration-300 ${
+                                state === 'done' ? 'text-gray-700' : state === 'active' ? 'text-orange-600' : 'text-gray-400'
+                              }`}>{label}</p>
+                              {state === 'active' && <p className="text-[10px] text-orange-400 mt-0.5 animate-pulse">In progress...</p>}
+                              {state === 'done' && <p className="text-[10px] text-green-500 mt-0.5">Complete</p>}
                             </div>
-                            <p className={`text-[11px] font-semibold text-center mt-2 leading-tight transition-all duration-300 ${
-                              state === 'done' ? 'text-gray-700' :
-                              state === 'active' ? 'text-orange-600' :
-                              'text-gray-400'
-                            }`}>
-                              {label}
-                            </p>
-                            {state === 'active' && (
-                              <p className="text-[10px] text-orange-400 mt-0.5 animate-pulse">In progress...</p>
-                            )}
-                            {state === 'done' && (
-                              <p className="text-[10px] text-green-500 mt-0.5">Complete</p>
+                            {!isLast && (
+                              <div className={`flex-1 h-0.5 mx-2 mb-6 transition-all duration-500 ${state === 'done' ? 'bg-orange-400' : 'bg-gray-200'}`} />
                             )}
                           </div>
-                          {/* Connector line */}
-                          {!isLast && (
-                            <div className={`flex-1 h-0.5 mx-2 mb-6 transition-all duration-500 ${state === 'done' ? 'bg-orange-400' : 'bg-gray-200'}`} />
+                        );
+                      })}
+                    </div>
+                    <div className="mt-5 w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="bg-orange-500 h-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5 text-right">{uploadProgress}% complete</p>
+                  </div>
+
+                  {/* Sign-up nudge */}
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-400 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg shadow-orange-100">
+                    <div>
+                      <p className="text-white font-bold text-base mb-0.5">Your report will be ready soon!</p>
+                      <p className="text-orange-100 text-sm">Sign up to save your report, access it anytime, and run future analyses in seconds.</p>
+                    </div>
+                    <button className="flex-shrink-0 bg-white text-orange-600 font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-orange-50 transition-all shadow-sm whitespace-nowrap flex items-center gap-2">
+                      <User className="w-4 h-4" /> Sign Up Free
+                    </button>
+                  </div>
+
+                  {/* Project details */}
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-5">
+                      <h2 className="text-base font-bold">Define Project Details</h2>
+                      <div className="flex items-center gap-1.5 bg-orange-50 text-orange-600 px-2.5 py-1 rounded-lg border border-orange-100 text-[10px] font-bold uppercase tracking-wider">
+                        <Sparkles className="w-3.5 h-3.5" /> AI Generated
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      {[
+                        { key: 'title', label: 'Project Title', value: metadata.title, type: 'input' },
+                        { key: 'goal',  label: 'Project Goal',  value: metadata.goal,  type: 'input' },
+                        { key: 'description', label: 'Project Description', value: metadata.description, type: 'textarea' },
+                      ].map(({ key, label, value, type }) => (
+                        <div key={key}>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-bold uppercase text-gray-400">{label}</label>
+                            <button
+                              onClick={() => setEditingField(editingField === key ? null : key)}
+                              className={`p-1.5 rounded-lg transition-all ${editingField === key ? 'bg-orange-100 text-orange-600' : 'text-gray-300 hover:text-orange-500 hover:bg-orange-50'}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {editingField === key ? (
+                            type === 'textarea' ? (
+                              <textarea autoFocus rows={4} value={value}
+                                onChange={(e) => setMetadata({...metadata, [key]: e.target.value})}
+                                onBlur={() => setEditingField(null)}
+                                className="w-full text-sm font-medium p-3 bg-gray-50 border border-orange-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all resize-none"
+                              />
+                            ) : (
+                              <input autoFocus value={value}
+                                onChange={(e) => setMetadata({...metadata, [key]: e.target.value})}
+                                onBlur={() => setEditingField(null)}
+                                className="w-full text-sm font-medium p-3 bg-gray-50 border border-orange-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                              />
+                            )
+                          ) : (
+                            <p className={`w-full text-sm font-medium p-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-800 ${type === 'textarea' ? 'min-h-[80px] whitespace-pre-wrap' : ''}`}>
+                              {value || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
-                  <div
-                    className="bg-orange-500 h-full transition-all duration-300 ease-out"
-                    style={{width: `${uploadProgress}%`}}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-400">{uploadProgress}% complete</p>
-              </div>
-
-              <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-xl w-full">
-                <div className="flex items-start justify-between mb-4">
-                  <h2 className="text-xl font-bold mb-1">Define Project Details</h2>
-                  <div className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-orange-100 animate-pulse">
-                    <Sparkles className="w-4 h-4" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">AI Generated</span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {/* Project Title */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-bold uppercase text-gray-400">Project Title</label>
-                      <button
-                        onClick={() => setEditingField(editingField === 'title' ? null : 'title')}
-                        className={`p-1.5 rounded-lg transition-all ${editingField === 'title' ? 'bg-orange-100 text-orange-600' : 'text-gray-300 hover:text-orange-500 hover:bg-orange-50'}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      ))}
                     </div>
-                    {editingField === 'title' ? (
-                      <input
-                        autoFocus
-                        value={metadata.title}
-                        onChange={(e) => setMetadata({...metadata, title: e.target.value})}
-                        onBlur={() => setEditingField(null)}
-                        className="w-full text-base font-medium p-3 bg-gray-50 border border-orange-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                      />
-                    ) : (
-                      <p className="w-full text-base font-medium p-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-800">{metadata.title}</p>
+
+                    {allDone && (
+                      <button
+                        onClick={() => { setStep('report'); setActiveTab('Summary'); }}
+                        className="w-full mt-6 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-100 animate-bounce"
+                      >
+                        Open Report <ArrowRight className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
+                </>)}
 
-                  {/* Project Goal */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-bold uppercase text-gray-400">Project Goal</label>
-                      <button
-                        onClick={() => setEditingField(editingField === 'goal' ? null : 'goal')}
-                        className={`p-1.5 rounded-lg transition-all ${editingField === 'goal' ? 'bg-orange-100 text-orange-600' : 'text-gray-300 hover:text-orange-500 hover:bg-orange-50'}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {editingField === 'goal' ? (
-                      <input
-                        autoFocus
-                        value={metadata.goal}
-                        onChange={(e) => setMetadata({...metadata, goal: e.target.value})}
-                        onBlur={() => setEditingField(null)}
-                        className="w-full text-base font-medium p-3 bg-gray-50 border border-orange-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                      />
-                    ) : (
-                      <p className="w-full text-base font-medium p-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-800">{metadata.goal}</p>
-                    )}
-                  </div>
-
-                  {/* Project Description */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-bold uppercase text-gray-400">Project Description</label>
-                      <button
-                        onClick={() => setEditingField(editingField === 'description' ? null : 'description')}
-                        className={`p-1.5 rounded-lg transition-all ${editingField === 'description' ? 'bg-orange-100 text-orange-600' : 'text-gray-300 hover:text-orange-500 hover:bg-orange-50'}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {editingField === 'description' ? (
-                      <textarea
-                        autoFocus
-                        value={metadata.description}
-                        onChange={(e) => setMetadata({...metadata, description: e.target.value})}
-                        onBlur={() => setEditingField(null)}
-                        rows={4}
-                        className="w-full text-base font-medium p-3 bg-gray-50 border border-orange-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all resize-none"
-                      />
-                    ) : (
-                      <p className="w-full text-base font-medium p-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-800 min-h-[100px] whitespace-pre-wrap">{metadata.description || <span className="text-gray-400 italic">No description yet</span>}</p>
-                    )}
-                  </div>
-                </div>
-                {allDone && (
-                  <button
-                    onClick={() => { setStep('report'); setActiveTab('Summary'); }}
-                    className="w-full mt-8 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-100 animate-bounce"
-                  >
-                    Open Report <ArrowRight className="w-4 h-4" />
-                  </button>
-                )}
               </div>
             </div>
           </div>
